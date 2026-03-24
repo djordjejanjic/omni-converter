@@ -17,10 +17,16 @@ A lightweight open source macOS image converter. Drop files in, pick a format, d
 ### Homebrew
 
 ```
-brew install --cask omni-converter
+brew install --cask --no-quarantine omni-converter
 ```
 
-**Note on first launch:** macOS will show a security warning because the app uses ad-hoc signing. To open it, right-click on the app in `/Applications` and select **Open**. You only need to do this once.
+The `--no-quarantine` flag is needed because the app is not notarized with Apple. Without it, macOS Gatekeeper will block the app from opening.
+
+If you already installed without the flag, run:
+
+```
+xattr -cr /Applications/omni-converter.app
+```
 
 ### Build from source
 

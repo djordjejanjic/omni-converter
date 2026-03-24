@@ -153,7 +153,21 @@ enum ImageConverter {
             throw ConversionError.sourceCreationFailed(filename: filename)
         }
 
-        guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
+        let isRAW: Bool
+        if let sourceType = CGImageSourceGetType(imageSource) as String?,
+           let utType = UTType(sourceType),
+           utType.conforms(to: .rawImage) {
+            isRAW = true
+        } else {
+            isRAW = false
+        }
+
+        let decodeOptions: CFDictionary? = isRAW
+            ? [kCGImageSourceShouldAllowFloat: true,
+               kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+            : nil
+
+        guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, decodeOptions) else {
             throw ConversionError.imageDecodeFailed(filename: filename)
         }
 

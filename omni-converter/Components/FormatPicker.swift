@@ -10,7 +10,7 @@ struct FormatPicker: View {
     @Binding var quality: Double
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: 12) {
             HStack {
                 Text("Convert to:")
                 Picker("Format", selection: $selectedFormat) {

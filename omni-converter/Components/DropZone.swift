@@ -17,12 +17,16 @@ struct DropZone: View {
                 .font(.system(size: 36))
                 .foregroundColor(isTargeted ? .accentColor : .secondary)
 
-            Text("Drop images here")
+            Text("Drop images or RAW files here")
                 .font(.headline)
 
             Text("or click to browse")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
+
+            Text("NEF · CR2 · CR3 · ARW · RAF and more")
+                .font(.caption)
+                .foregroundColor(.secondary.opacity(0.7))
         }
         .frame(maxWidth: .infinity)
         .frame(height: 160)
@@ -46,10 +50,20 @@ struct DropZone: View {
         .animation(.easeInOut(duration: 0.2), value: isTargeted)
     }
 
+    private static let rawTypes: [UTType] = [
+        .rawImage,
+        UTType("com.nikon.raw-image"),
+        UTType("com.nikon.nrw-raw-image"),
+        UTType("com.canon.cr2-raw-image"),
+        UTType("com.canon.cr3-raw-image"),
+        UTType("com.sony.arw-raw-image"),
+        UTType("com.fuji.raw-image"),
+    ].compactMap { $0 }
+
     private func openFilePicker() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [.image]
+        panel.allowedContentTypes = [.image] + Self.rawTypes
         panel.message = "Select images to convert"
 
         if panel.runModal() == .OK {
@@ -70,7 +84,7 @@ struct DropZone: View {
                        let url = URL(string: path) {
                         // Only accept image files
                         if let type = UTType(filenameExtension: url.pathExtension),
-                           type.conforms(to: .image) {
+                           type.conforms(to: .image) || type.conforms(to: .rawImage) {
                             urls.append(url)
                         }
                     }

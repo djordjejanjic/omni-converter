@@ -17,16 +17,11 @@ A lightweight open source macOS image converter. Drop files in, pick a format, d
 ### Homebrew
 
 ```
-brew install --cask --no-quarantine omni-converter
-```
-
-The `--no-quarantine` flag is needed because the app is not notarized with Apple. Without it, macOS Gatekeeper will block the app from opening.
-
-If you already installed without the flag, run:
-
-```
+brew install --cask omni-converter
 xattr -cr /Applications/omni-converter.app
 ```
+
+The `xattr` command removes the macOS quarantine flag. This is needed because the app is not notarized with Apple — without it, Gatekeeper will block the app from opening.
 
 ### Build from source
 

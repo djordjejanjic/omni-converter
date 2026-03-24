@@ -18,6 +18,8 @@ struct ContentView: View {
     @State private var mergeAllToPDF: Bool = false
 
     @State private var isConverting: Bool = false
+    @State private var conversionProgress: Int = 0
+    @State private var conversionTotal: Int = 0
     @State private var conversionResults: [ConversionResult] = []
     @State private var showResults: Bool = false
 
@@ -54,12 +56,18 @@ struct ContentView: View {
                 .padding(.bottom, 4)
 
             if isConverting {
-                HStack(spacing: 12) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Converting...")
+                VStack(spacing: 8) {
+                    ProgressView(
+                        value: Double(conversionProgress),
+                        total: max(Double(conversionTotal), 1)
+                    )
+                    .progressViewStyle(.linear)
+                    Text("Converting \(conversionProgress) of \(conversionTotal)...")
+                        .font(.caption)
                         .foregroundColor(.secondary)
+                        .monospacedDigit()
                 }
+                .padding(.horizontal)
             } else {
                 Button("Convert") {
                     startConversion()
@@ -73,12 +81,18 @@ struct ContentView: View {
         .frame(minWidth: 480, minHeight: 400)
         .alert("Conversion Complete", isPresented: $showResults) {
             Button("OK") {
+                let allSucceeded = conversionResults.allSatisfy {
+                    if case .success = $0.result { return true }
+                    return false
+                }
                 conversionResults.removeAll()
-                files.removeAll()
-                resizeWidth = ""
-                resizeHeight = ""
-                applyResizeToAll = false
-                mergeAllToPDF = false
+                if allSucceeded {
+                    files.removeAll()
+                    resizeWidth = ""
+                    resizeHeight = ""
+                    applyResizeToAll = false
+                    mergeAllToPDF = false
+                }
             }
         } message: {
             Text(resultsSummary)
@@ -133,6 +147,8 @@ struct ContentView: View {
         guard panel.runModal() == .OK, let saveURL = panel.url else { return }
 
         Task {
+            conversionProgress = 0
+            conversionTotal = 1
             isConverting = true
 
             let result: Result<URL, ConversionError>
@@ -151,6 +167,7 @@ struct ContentView: View {
                 result = .failure(.encodingFailed(filename: file.filename))
             }
 
+            conversionProgress = 1
             conversionResults = [ConversionResult(
                 id: file.id,
                 sourceFile: file,
@@ -179,6 +196,8 @@ struct ContentView: View {
         guard panel.runModal() == .OK, let directory = panel.url else { return }
 
         Task {
+            conversionProgress = 0
+            conversionTotal = files.count
             isConverting = true
 
             conversionResults = await ImageConverter.convertBatch(
@@ -186,7 +205,11 @@ struct ContentView: View {
                 to: selectedFormat,
                 quality: quality,
                 outputDirectory: directory,
-                targetSize: targetSize
+                targetSize: targetSize,
+                onProgress: { completed, total in
+                    conversionProgress = completed
+                    conversionTotal = total
+                }
             )
 
             isConverting = false
@@ -203,6 +226,8 @@ struct ContentView: View {
         guard panel.runModal() == .OK, let saveURL = panel.url else { return }
 
         Task {
+            conversionProgress = 0
+            conversionTotal = files.count
             isConverting = true
 
             let result: Result<URL, ConversionError>

@@ -107,11 +107,14 @@ enum ImageConverter {
         to format: OutputFormat,
         quality: Double = 0.85,
         outputDirectory: URL,
-        targetSize: CGSize? = nil
+        targetSize: CGSize? = nil,
+        onProgress: (@MainActor (Int, Int) -> Void)? = nil
     ) async -> [ConversionResult] {
         var results: [ConversionResult] = []
 
-        for file in files {
+        for (index, file) in files.enumerated() {
+            await onProgress?(index, files.count)
+
             let result: Result<URL, ConversionError>
             do {
                 let url = try await convert(
@@ -134,6 +137,7 @@ enum ImageConverter {
             ))
         }
 
+        await onProgress?(files.count, files.count)
         return results
     }
 
@@ -167,33 +171,57 @@ enum ImageConverter {
                kCGImageSourceShouldCacheImmediately: true] as CFDictionary
             : nil
 
-        guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, decodeOptions) else {
-            throw ConversionError.imageDecodeFailed(filename: filename)
-        }
-
-        let finalImage: CGImage
-        if let size = targetSize,
-           Int(size.width) != cgImage.width || Int(size.height) != cgImage.height {
-            finalImage = try resizeImage(cgImage, to: size, filename: filename)
-        } else {
-            finalImage = cgImage
-        }
+        let frameCount = CGImageSourceGetCount(imageSource)
+        let isAnimated = frameCount > 1 && format == .gif
 
         guard let destination = CGImageDestinationCreateWithURL(
             outputURL as CFURL,
             format.utType.identifier as CFString,
-            1,
+            isAnimated ? frameCount : 1,
             nil
         ) else {
             throw ConversionError.destinationCreationFailed(filename: filename)
         }
 
-        var properties: [CFString: Any] = [:]
-        if format.supportsQuality {
-            properties[kCGImageDestinationLossyCompressionQuality] = quality
-        }
+        if isAnimated {
+            if let sourceProperties = CGImageSourceCopyProperties(imageSource, nil) {
+                CGImageDestinationSetProperties(destination, sourceProperties)
+            }
 
-        CGImageDestinationAddImage(destination, finalImage, properties as CFDictionary)
+            for i in 0..<frameCount {
+                guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, i, decodeOptions) else {
+                    continue
+                }
+                let frameProperties = CGImageSourceCopyPropertiesAtIndex(imageSource, i, nil)
+                let finalImage: CGImage
+                if let size = targetSize,
+                   Int(size.width) != cgImage.width || Int(size.height) != cgImage.height {
+                    finalImage = (try? resizeImage(cgImage, to: size, filename: filename)) ?? cgImage
+                } else {
+                    finalImage = cgImage
+                }
+                CGImageDestinationAddImage(destination, finalImage, frameProperties)
+            }
+        } else {
+            guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, decodeOptions) else {
+                throw ConversionError.imageDecodeFailed(filename: filename)
+            }
+
+            let finalImage: CGImage
+            if let size = targetSize,
+               Int(size.width) != cgImage.width || Int(size.height) != cgImage.height {
+                finalImage = try resizeImage(cgImage, to: size, filename: filename)
+            } else {
+                finalImage = cgImage
+            }
+
+            var properties: [CFString: Any] = [:]
+            if format.supportsQuality {
+                properties[kCGImageDestinationLossyCompressionQuality] = quality
+            }
+
+            CGImageDestinationAddImage(destination, finalImage, properties as CFDictionary)
+        }
 
         guard CGImageDestinationFinalize(destination) else {
             throw ConversionError.encodingFailed(filename: filename)

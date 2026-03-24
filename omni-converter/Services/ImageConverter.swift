@@ -55,7 +55,8 @@ enum ImageConverter {
         file: ImageFile,
         to format: OutputFormat,
         quality: Double = 0.85,
-        outputDirectory: URL
+        outputDirectory: URL,
+        targetSize: CGSize? = nil
     ) async throws -> URL {
         // Compute a unique output path so we never overwrite existing files
         let baseName = file.url.deletingPathExtension().lastPathComponent
@@ -65,7 +66,7 @@ enum ImageConverter {
             fileExtension: format.fileExtension
         )
 
-        try writeConversion(file: file, to: format, quality: quality, outputURL: outputURL)
+        try writeConversion(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize)
         return outputURL
     }
 
@@ -73,9 +74,10 @@ enum ImageConverter {
         file: ImageFile,
         to format: OutputFormat,
         quality: Double = 0.85,
-        outputURL: URL
+        outputURL: URL,
+        targetSize: CGSize? = nil
     ) async throws {
-        try writeConversion(file: file, to: format, quality: quality, outputURL: outputURL)
+        try writeConversion(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize)
     }
 
     /// Shared conversion logic — routes to PDF or raster pipeline.
@@ -83,17 +85,19 @@ enum ImageConverter {
         file: ImageFile,
         to format: OutputFormat,
         quality: Double,
-        outputURL: URL
+        outputURL: URL,
+        targetSize: CGSize? = nil
     ) throws {
         if format == .pdf {
-            try renderToPDF(sourceURL: file.url, outputURL: outputURL, filename: file.filename)
+            try renderToPDF(sourceURL: file.url, outputURL: outputURL, filename: file.filename, targetSize: targetSize)
         } else {
             try renderToImage(
                 sourceURL: file.url,
                 outputURL: outputURL,
                 format: format,
                 quality: quality,
-                filename: file.filename
+                filename: file.filename,
+                targetSize: targetSize
             )
         }
     }
@@ -102,7 +106,8 @@ enum ImageConverter {
         files: [ImageFile],
         to format: OutputFormat,
         quality: Double = 0.85,
-        outputDirectory: URL
+        outputDirectory: URL,
+        targetSize: CGSize? = nil
     ) async -> [ConversionResult] {
         var results: [ConversionResult] = []
 
@@ -113,7 +118,8 @@ enum ImageConverter {
                     file: file,
                     to: format,
                     quality: quality,
-                    outputDirectory: outputDirectory
+                    outputDirectory: outputDirectory,
+                    targetSize: targetSize
                 )
                 result = .success(url)
             } catch let error as ConversionError {
@@ -140,7 +146,8 @@ enum ImageConverter {
         outputURL: URL,
         format: OutputFormat,
         quality: Double,
-        filename: String
+        filename: String,
+        targetSize: CGSize? = nil
     ) throws {
         guard let imageSource = CGImageSourceCreateWithURL(sourceURL as CFURL, nil) else {
             throw ConversionError.sourceCreationFailed(filename: filename)
@@ -148,6 +155,14 @@ enum ImageConverter {
 
         guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, nil) else {
             throw ConversionError.imageDecodeFailed(filename: filename)
+        }
+
+        let finalImage: CGImage
+        if let size = targetSize,
+           Int(size.width) != cgImage.width || Int(size.height) != cgImage.height {
+            finalImage = try resizeImage(cgImage, to: size, filename: filename)
+        } else {
+            finalImage = cgImage
         }
 
         guard let destination = CGImageDestinationCreateWithURL(
@@ -164,18 +179,44 @@ enum ImageConverter {
             properties[kCGImageDestinationLossyCompressionQuality] = quality
         }
 
-        CGImageDestinationAddImage(destination, cgImage, properties as CFDictionary)
+        CGImageDestinationAddImage(destination, finalImage, properties as CFDictionary)
 
         guard CGImageDestinationFinalize(destination) else {
             throw ConversionError.encodingFailed(filename: filename)
         }
     }
 
+    private static func resizeImage(_ image: CGImage, to size: CGSize, filename: String) throws -> CGImage {
+        let width = Int(size.width)
+        let height = Int(size.height)
+
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: image.bitsPerComponent,
+            bytesPerRow: 0,
+            space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: image.bitmapInfo.rawValue
+        ) else {
+            throw ConversionError.encodingFailed(filename: filename)
+        }
+
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        guard let resized = context.makeImage() else {
+            throw ConversionError.encodingFailed(filename: filename)
+        }
+        return resized
+    }
+
     /// Special path for PDF output.
     private static func renderToPDF(
         sourceURL: URL,
         outputURL: URL,
-        filename: String
+        filename: String,
+        targetSize: CGSize? = nil
     ) throws {
         guard let image = NSImage(contentsOf: sourceURL) else {
             throw ConversionError.imageDecodeFailed(filename: filename)
@@ -184,8 +225,15 @@ enum ImageConverter {
         guard let rep = image.representations.first else {
             throw ConversionError.imageDecodeFailed(filename: filename)
         }
-        let width = rep.pixelsWide > 0 ? rep.pixelsWide : Int(image.size.width)
-        let height = rep.pixelsHigh > 0 ? rep.pixelsHigh : Int(image.size.height)
+        let width: Int
+        let height: Int
+        if let size = targetSize {
+            width = Int(size.width)
+            height = Int(size.height)
+        } else {
+            width = rep.pixelsWide > 0 ? rep.pixelsWide : Int(image.size.width)
+            height = rep.pixelsHigh > 0 ? rep.pixelsHigh : Int(image.size.height)
+        }
 
         var mediaBox = CGRect(x: 0, y: 0, width: width, height: height)
 
@@ -202,6 +250,64 @@ enum ImageConverter {
         NSGraphicsContext.restoreGraphicsState()
 
         pdfContext.endPDFPage()
+        pdfContext.closePDF()
+    }
+
+    static func renderMultipleToPDF(
+        files: [ImageFile],
+        outputURL: URL,
+        targetSize: CGSize? = nil
+    ) async throws {
+        let a4Width: CGFloat = 595.28
+        let a4Height: CGFloat = 841.89
+        let maxContentWidth = a4Width * 0.9
+        let maxContentHeight = a4Height * 0.9
+
+        var pageBox = CGRect(x: 0, y: 0, width: a4Width, height: a4Height)
+
+        guard let pdfContext = CGContext(outputURL as CFURL, mediaBox: &pageBox, nil) else {
+            throw ConversionError.pdfRenderFailed(filename: outputURL.lastPathComponent)
+        }
+
+        for file in files {
+            guard let image = NSImage(contentsOf: file.url) else {
+                throw ConversionError.imageDecodeFailed(filename: file.filename)
+            }
+
+            guard let rep = image.representations.first else {
+                throw ConversionError.imageDecodeFailed(filename: file.filename)
+            }
+
+            let imgWidth: CGFloat
+            let imgHeight: CGFloat
+            if let size = targetSize {
+                imgWidth = size.width
+                imgHeight = size.height
+            } else {
+                imgWidth = rep.pixelsWide > 0 ? CGFloat(rep.pixelsWide) : image.size.width
+                imgHeight = rep.pixelsHigh > 0 ? CGFloat(rep.pixelsHigh) : image.size.height
+            }
+
+            let scaleX = maxContentWidth / imgWidth
+            let scaleY = maxContentHeight / imgHeight
+            let scale = min(scaleX, scaleY, 1.0)
+
+            let drawWidth = imgWidth * scale
+            let drawHeight = imgHeight * scale
+            let drawX = (a4Width - drawWidth) / 2
+            let drawY = (a4Height - drawHeight) / 2
+
+            pdfContext.beginPDFPage(nil)
+
+            let nsContext = NSGraphicsContext(cgContext: pdfContext, flipped: false)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = nsContext
+            image.draw(in: CGRect(x: drawX, y: drawY, width: drawWidth, height: drawHeight))
+            NSGraphicsContext.restoreGraphicsState()
+
+            pdfContext.endPDFPage()
+        }
+
         pdfContext.closePDF()
     }
 

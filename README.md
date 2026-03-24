@@ -20,6 +20,8 @@ A lightweight macOS image converter. Drop files in, pick a format, done.
 brew install --cask omni-converter
 ```
 
+**Note on first launch:** macOS will show a security warning because the app uses ad-hoc signing. To open it, right-click on the app in `/Applications` and select **Open**. You only need to do this once.
+
 ### Build from source
 
 Requires Xcode 15+ and macOS 14+.

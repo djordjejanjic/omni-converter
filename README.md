@@ -42,6 +42,12 @@ The built app will be in `build/Release/omni-converter.app`. Drag it to `/Applic
 3. Optionally adjust quality or resize dimensions
 4. Click **Convert**
 
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+If you find a bug or have a feature request, [open an issue](https://github.com/djordjejanjic/omni-converter/issues).
+
 ## License
 
-MIT
+[MIT](LICENSE)

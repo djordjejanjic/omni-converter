@@ -12,6 +12,8 @@ A lightweight open source macOS image converter. Drop files in, pick a format, d
 - Animated GIF preservation
 - JPEG quality control
 
+<img width="889" height="577" alt="image" src="https://github.com/user-attachments/assets/b27901f2-2666-4077-a17f-9d31957bb303" />
+
 ## Install
 
 ### Homebrew

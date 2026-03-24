@@ -1,6 +1,6 @@
 # omni-converter
 
-A lightweight macOS image converter. Drop files in, pick a format, done.
+A lightweight open source macOS image converter. Drop files in, pick a format, done.
 
 ## Features
 

@@ -66,7 +66,7 @@ enum ImageConverter {
             fileExtension: format.fileExtension
         )
 
-        try writeConversion(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize)
+        try await writeConversionAsync(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize)
         return outputURL
     }
 
@@ -77,10 +77,22 @@ enum ImageConverter {
         outputURL: URL,
         targetSize: CGSize? = nil
     ) async throws {
-        try writeConversion(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize)
+        try await writeConversionAsync(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize)
     }
 
     /// Shared conversion logic — routes to PDF or raster pipeline.
+    private static func writeConversionAsync(
+        file: ImageFile,
+        to format: OutputFormat,
+        quality: Double,
+        outputURL: URL,
+        targetSize: CGSize? = nil
+    ) async throws {
+        try await Task.detached(priority: .userInitiated) {
+            try writeConversion(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize)
+        }.value
+    }
+
     private static func writeConversion(
         file: ImageFile,
         to format: OutputFormat,
@@ -113,6 +125,8 @@ enum ImageConverter {
         var results: [ConversionResult] = []
 
         for (index, file) in files.enumerated() {
+            if Task.isCancelled { break }
+
             await onProgress?(index, files.count)
 
             let result: Result<URL, ConversionError>
@@ -137,7 +151,7 @@ enum ImageConverter {
             ))
         }
 
-        await onProgress?(files.count, files.count)
+        await onProgress?(results.count, files.count)
         return results
     }
 

@@ -20,6 +20,7 @@ struct ContentView: View {
     @State private var isConverting: Bool = false
     @State private var conversionProgress: Int = 0
     @State private var conversionTotal: Int = 0
+    @State private var conversionTask: Task<Void, Never>?
     @State private var conversionResults: [ConversionResult] = []
     @State private var showResults: Bool = false
 
@@ -62,12 +63,19 @@ struct ContentView: View {
                         total: max(Double(conversionTotal), 1)
                     )
                     .progressViewStyle(.linear)
+
                     Text("Converting \(conversionProgress) of \(conversionTotal)...")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .monospacedDigit()
                 }
-                .padding(.horizontal)
+
+                Button("Stop") {
+                    conversionTask?.cancel()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .controlSize(.large)
             } else {
                 Button("Convert") {
                     startConversion()
@@ -146,7 +154,7 @@ struct ContentView: View {
 
         guard panel.runModal() == .OK, let saveURL = panel.url else { return }
 
-        Task {
+        conversionTask = Task {
             conversionProgress = 0
             conversionTotal = 1
             isConverting = true
@@ -195,7 +203,7 @@ struct ContentView: View {
 
         guard panel.runModal() == .OK, let directory = panel.url else { return }
 
-        Task {
+        conversionTask = Task {
             conversionProgress = 0
             conversionTotal = files.count
             isConverting = true
@@ -213,7 +221,9 @@ struct ContentView: View {
             )
 
             isConverting = false
-            showResults = true
+            if !Task.isCancelled {
+                showResults = true
+            }
         }
     }
 
@@ -225,7 +235,7 @@ struct ContentView: View {
 
         guard panel.runModal() == .OK, let saveURL = panel.url else { return }
 
-        Task {
+        conversionTask = Task {
             conversionProgress = 0
             conversionTotal = files.count
             isConverting = true

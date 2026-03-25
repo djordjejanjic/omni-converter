@@ -51,6 +51,8 @@ Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines
 
 If you find a bug or have a feature request, [open an issue](https://github.com/djordjejanjic/omni-converter/issues).
 
+Claude is used for part of this app, so LLMs are welcome, as long as it is human reviewed.
+
 ## License
 
 [MIT](LICENSE)

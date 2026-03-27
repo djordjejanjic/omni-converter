@@ -102,6 +102,8 @@ enum ImageConverter {
     ) throws {
         if format == .pdf {
             try renderToPDF(sourceURL: file.url, outputURL: outputURL, filename: file.filename, targetSize: targetSize)
+        } else if format == .webp {
+            try renderToWebP(sourceURL: file.url, outputURL: outputURL, quality: quality, filename: file.filename, targetSize: targetSize)
         } else {
             try renderToImage(
                 sourceURL: file.url,
@@ -240,6 +242,49 @@ enum ImageConverter {
         guard CGImageDestinationFinalize(destination) else {
             throw ConversionError.encodingFailed(filename: filename)
         }
+    }
+
+    private static func renderToWebP(
+        sourceURL: URL,
+        outputURL: URL,
+        quality: Double,
+        filename: String,
+        targetSize: CGSize? = nil
+    ) throws {
+        guard let imageSource = CGImageSourceCreateWithURL(sourceURL as CFURL, nil) else {
+            throw ConversionError.sourceCreationFailed(filename: filename)
+        }
+
+        let isRAW: Bool
+        if let sourceType = CGImageSourceGetType(imageSource) as String?,
+           let utType = UTType(sourceType),
+           utType.conforms(to: .rawImage) {
+            isRAW = true
+        } else {
+            isRAW = false
+        }
+
+        let decodeOptions: CFDictionary? = isRAW
+            ? [kCGImageSourceShouldAllowFloat: true,
+               kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+            : nil
+
+        guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, decodeOptions) else {
+            throw ConversionError.imageDecodeFailed(filename: filename)
+        }
+
+        let finalImage: CGImage
+        if let size = targetSize,
+           Int(size.width) != cgImage.width || Int(size.height) != cgImage.height {
+            finalImage = try resizeImage(cgImage, to: size, filename: filename)
+        } else {
+            finalImage = cgImage
+        }
+
+        let webpQuality = Float(quality * 100)
+        let data = try WebPEncoder.encode(finalImage, quality: webpQuality)
+
+        try data.write(to: outputURL)
     }
 
     private static func resizeImage(_ image: CGImage, to size: CGSize, filename: String) throws -> CGImage {

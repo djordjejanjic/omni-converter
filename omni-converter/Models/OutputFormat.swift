@@ -13,6 +13,7 @@ enum OutputFormat: String, CaseIterable, Identifiable {
     case heic = "public.heic"
     case pdf  = "com.adobe.pdf"
     case bmp  = "com.microsoft.bmp"
+    case webp = "org.webmproject.webp"
 
     var id: String { rawValue }
 
@@ -25,6 +26,7 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .heic: return "HEIC"
         case .pdf:  return "PDF"
         case .bmp:  return "BMP"
+        case .webp: return "WEBP"
         }
     }
 
@@ -37,6 +39,7 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .heic: return "heic"
         case .pdf:  return "pdf"
         case .bmp:  return "bmp"
+        case .webp: return "webp"
         }
     }
 
@@ -49,11 +52,11 @@ enum OutputFormat: String, CaseIterable, Identifiable {
         case .heic: return .heic
         case .pdf:  return .pdf
         case .bmp:  return .bmp
+        case .webp: return .webP
         }
     }
 
-    /// Whether this format supports a quality setting (lossy formats only).
     var supportsQuality: Bool {
-        self == .jpeg
+        self == .jpeg || self == .webp
     }
 }

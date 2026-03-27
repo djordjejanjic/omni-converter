@@ -270,7 +270,10 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/omni-converter/Libraries/libwebp";
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/omni-converter/Libraries/libwebp",
+					"$(SRCROOT)/omni-converter/Libraries/libwebp/src",
+				);
 				INFOPLIST_KEY_CFBundleDisplayName = "omni-converter";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
@@ -318,7 +321,10 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = "$(SRCROOT)/omni-converter/Libraries/libwebp";
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/omni-converter/Libraries/libwebp",
+					"$(SRCROOT)/omni-converter/Libraries/libwebp/src",
+				);
 				INFOPLIST_KEY_CFBundleDisplayName = "omni-converter";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";

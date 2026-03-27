@@ -39,7 +39,7 @@ struct FileList: View {
                         }
                     }
                 }
-                .frame(maxHeight: 160)
+                .frame(minHeight: 80, maxHeight: 160)
             }
         }
     }

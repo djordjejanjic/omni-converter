@@ -63,7 +63,7 @@ struct ContentView: View {
                     )
                     .progressViewStyle(.linear)
 
-                    Text("Converting \(Int(conversionProgress)) of \(conversionTotal)...")
+                    Text("Converting \(Int(conversionProgress) + 1) of \(conversionTotal)...")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .monospacedDigit()

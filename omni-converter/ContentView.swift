@@ -18,7 +18,7 @@ struct ContentView: View {
     @State private var mergeAllToPDF: Bool = false
 
     @State private var isConverting: Bool = false
-    @State private var conversionProgress: Int = 0
+    @State private var conversionProgress: Double = 0
     @State private var conversionTotal: Int = 0
     @State private var conversionTask: Task<Void, Never>?
     @State private var conversionResults: [ConversionResult] = []
@@ -29,8 +29,7 @@ struct ContentView: View {
             DropZone(onFilesAdded: addFiles)
                 .disabled(isConverting)
 
-            FileList(files: $files)
-                .disabled(isConverting)
+            FileList(files: $files, isConverting: isConverting)
 
             FormatPicker(
                 selectedFormat: $selectedFormat,
@@ -59,12 +58,12 @@ struct ContentView: View {
             if isConverting {
                 VStack(spacing: 8) {
                     ProgressView(
-                        value: Double(conversionProgress),
+                        value: conversionProgress,
                         total: max(Double(conversionTotal), 1)
                     )
                     .progressViewStyle(.linear)
 
-                    Text("Converting \(conversionProgress) of \(conversionTotal)...")
+                    Text("Converting \(Int(conversionProgress) + 1) of \(conversionTotal)...")
                         .font(.caption)
                         .foregroundColor(.secondary)
                         .monospacedDigit()
@@ -166,7 +165,10 @@ struct ContentView: View {
                     to: selectedFormat,
                     quality: quality,
                     outputURL: saveURL,
-                    targetSize: targetSize
+                    targetSize: targetSize,
+                    onStage: { stage in
+                        conversionProgress = stage
+                    }
                 )
                 result = .success(saveURL)
             } catch let error as ConversionError {
@@ -214,8 +216,8 @@ struct ContentView: View {
                 quality: quality,
                 outputDirectory: directory,
                 targetSize: targetSize,
-                onProgress: { completed, total in
-                    conversionProgress = completed
+                onProgress: { progress, total in
+                    conversionProgress = progress
                     conversionTotal = total
                 }
             )

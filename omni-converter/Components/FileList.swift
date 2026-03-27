@@ -7,6 +7,7 @@ import SwiftUI
 
 struct FileList: View {
     @Binding var files: [ImageFile]
+    var isConverting: Bool = false
 
     var body: some View {
         if !files.isEmpty {
@@ -15,12 +16,14 @@ struct FileList: View {
                     Text("Files")
                         .font(.headline)
                     Spacer()
-                    Button("Clear all") {
-                        files.removeAll()
+                    if !isConverting {
+                        Button("Clear all") {
+                            files.removeAll()
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundColor(.secondary)
+                        .font(.caption)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
-                    .font(.caption)
                 }
                 .padding(.bottom, 8)
 
@@ -29,14 +32,14 @@ struct FileList: View {
                 ScrollView {
                     VStack(spacing: 0) {
                         ForEach(files) { file in
-                            FileRow(file: file) {
+                            FileRow(file: file, isConverting: isConverting) {
                                 files.removeAll { $0.id == file.id }
                             }
                             Divider()
                         }
                     }
                 }
-                .frame(maxHeight: 160)
+                .frame(minHeight: 80, maxHeight: 160)
             }
         }
     }
@@ -44,6 +47,7 @@ struct FileList: View {
 
 struct FileRow: View {
     let file: ImageFile
+    var isConverting: Bool = false
     var onRemove: () -> Void
 
     var body: some View {
@@ -61,11 +65,13 @@ struct FileRow: View {
                 .foregroundColor(.secondary)
                 .font(.caption)
 
-            Button(action: onRemove) {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.secondary)
+            if !isConverting {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding(.vertical, 6)
     }

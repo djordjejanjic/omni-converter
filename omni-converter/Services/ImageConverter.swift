@@ -41,7 +41,7 @@ struct ConversionResult: Identifiable {
     let result: Result<URL, ConversionError>
 }
 
-enum ImageConverter {
+nonisolated enum ImageConverter {
 
     /// Convert a single image file to the target format.
     ///
@@ -75,21 +75,27 @@ enum ImageConverter {
         to format: OutputFormat,
         quality: Double = 0.85,
         outputURL: URL,
-        targetSize: CGSize? = nil
+        targetSize: CGSize? = nil,
+        onStage: (@MainActor (Double) -> Void)? = nil
     ) async throws {
-        try await writeConversionAsync(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize)
+        try await writeConversionAsync(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize, onStage: onStage)
     }
 
-    /// Shared conversion logic — routes to PDF or raster pipeline.
     private static func writeConversionAsync(
         file: ImageFile,
         to format: OutputFormat,
         quality: Double,
         outputURL: URL,
-        targetSize: CGSize? = nil
+        targetSize: CGSize? = nil,
+        onStage: (@MainActor (Double) -> Void)? = nil
     ) async throws {
+        let sendStage = onStage
         try await Task.detached(priority: .userInitiated) {
-            try writeConversion(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize)
+            try writeConversion(file: file, to: format, quality: quality, outputURL: outputURL, targetSize: targetSize) { stage in
+                Task { @MainActor in
+                    sendStage?(stage)
+                }
+            }
         }.value
     }
 
@@ -98,10 +104,13 @@ enum ImageConverter {
         to format: OutputFormat,
         quality: Double,
         outputURL: URL,
-        targetSize: CGSize? = nil
+        targetSize: CGSize? = nil,
+        onStage: ((Double) -> Void)? = nil
     ) throws {
         if format == .pdf {
             try renderToPDF(sourceURL: file.url, outputURL: outputURL, filename: file.filename, targetSize: targetSize)
+        } else if format == .webp {
+            try renderToWebP(sourceURL: file.url, outputURL: outputURL, quality: quality, filename: file.filename, targetSize: targetSize, onStage: onStage)
         } else {
             try renderToImage(
                 sourceURL: file.url,
@@ -109,7 +118,8 @@ enum ImageConverter {
                 format: format,
                 quality: quality,
                 filename: file.filename,
-                targetSize: targetSize
+                targetSize: targetSize,
+                onStage: onStage
             )
         }
     }
@@ -120,25 +130,35 @@ enum ImageConverter {
         quality: Double = 0.85,
         outputDirectory: URL,
         targetSize: CGSize? = nil,
-        onProgress: (@MainActor (Int, Int) -> Void)? = nil
+        onProgress: (@MainActor (Double, Int) -> Void)? = nil
     ) async -> [ConversionResult] {
         var results: [ConversionResult] = []
+        let total = files.count
 
         for (index, file) in files.enumerated() {
             if Task.isCancelled { break }
 
-            await onProgress?(index, files.count)
+            let baseName = file.url.deletingPathExtension().lastPathComponent
+            let outputURL = uniqueOutputURL(
+                directory: outputDirectory,
+                baseName: baseName,
+                fileExtension: format.fileExtension
+            )
 
             let result: Result<URL, ConversionError>
             do {
-                let url = try await convert(
+                try await writeConversionAsync(
                     file: file,
                     to: format,
                     quality: quality,
-                    outputDirectory: outputDirectory,
-                    targetSize: targetSize
+                    outputURL: outputURL,
+                    targetSize: targetSize,
+                    onStage: { stage in
+                        let fileProgress = Double(index) + stage
+                        onProgress?(fileProgress, total)
+                    }
                 )
-                result = .success(url)
+                result = .success(outputURL)
             } catch let error as ConversionError {
                 result = .failure(error)
             } catch {
@@ -151,7 +171,7 @@ enum ImageConverter {
             ))
         }
 
-        await onProgress?(results.count, files.count)
+        await onProgress?(Double(results.count), total)
         return results
     }
 
@@ -165,7 +185,8 @@ enum ImageConverter {
         format: OutputFormat,
         quality: Double,
         filename: String,
-        targetSize: CGSize? = nil
+        targetSize: CGSize? = nil,
+        onStage: ((Double) -> Void)? = nil
     ) throws {
         guard let imageSource = CGImageSourceCreateWithURL(sourceURL as CFURL, nil) else {
             throw ConversionError.sourceCreationFailed(filename: filename)
@@ -196,6 +217,8 @@ enum ImageConverter {
         ) else {
             throw ConversionError.destinationCreationFailed(filename: filename)
         }
+
+        onStage?(0.33)
 
         if isAnimated {
             if let sourceProperties = CGImageSourceCopyProperties(imageSource, nil) {
@@ -229,6 +252,8 @@ enum ImageConverter {
                 finalImage = cgImage
             }
 
+            onStage?(0.66)
+
             var properties: [CFString: Any] = [:]
             if format.supportsQuality {
                 properties[kCGImageDestinationLossyCompressionQuality] = quality
@@ -240,20 +265,75 @@ enum ImageConverter {
         guard CGImageDestinationFinalize(destination) else {
             throw ConversionError.encodingFailed(filename: filename)
         }
+
+        onStage?(1.0)
+    }
+
+    private static func renderToWebP(
+        sourceURL: URL,
+        outputURL: URL,
+        quality: Double,
+        filename: String,
+        targetSize: CGSize? = nil,
+        onStage: ((Double) -> Void)? = nil
+    ) throws {
+        guard let imageSource = CGImageSourceCreateWithURL(sourceURL as CFURL, nil) else {
+            throw ConversionError.sourceCreationFailed(filename: filename)
+        }
+
+        let isRAW: Bool
+        if let sourceType = CGImageSourceGetType(imageSource) as String?,
+           let utType = UTType(sourceType),
+           utType.conforms(to: .rawImage) {
+            isRAW = true
+        } else {
+            isRAW = false
+        }
+
+        let decodeOptions: CFDictionary? = isRAW
+            ? [kCGImageSourceShouldAllowFloat: true,
+               kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+            : nil
+
+        guard let cgImage = CGImageSourceCreateImageAtIndex(imageSource, 0, decodeOptions) else {
+            throw ConversionError.imageDecodeFailed(filename: filename)
+        }
+
+        onStage?(0.33)
+
+        let finalImage: CGImage
+        if let size = targetSize,
+           Int(size.width) != cgImage.width || Int(size.height) != cgImage.height {
+            finalImage = try resizeImage(cgImage, to: size, filename: filename)
+        } else {
+            finalImage = cgImage
+        }
+
+        onStage?(0.66)
+
+        let webpQuality = Float(quality * 100)
+        let data = try WebPEncoder.encode(finalImage, quality: webpQuality)
+
+        try data.write(to: outputURL)
+
+        onStage?(1.0)
     }
 
     private static func resizeImage(_ image: CGImage, to size: CGSize, filename: String) throws -> CGImage {
         let width = Int(size.width)
         let height = Int(size.height)
+        let hasAlpha = image.alphaInfo != .none && image.alphaInfo != .noneSkipLast && image.alphaInfo != .noneSkipFirst
+        let alphaInfo: CGImageAlphaInfo = hasAlpha ? .premultipliedLast : .noneSkipLast
+        let bitmapInfo = CGBitmapInfo(rawValue: alphaInfo.rawValue)
 
         guard let context = CGContext(
             data: nil,
             width: width,
             height: height,
-            bitsPerComponent: image.bitsPerComponent,
+            bitsPerComponent: 8,
             bytesPerRow: 0,
             space: image.colorSpace ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: image.bitmapInfo.rawValue
+            bitmapInfo: bitmapInfo.rawValue
         ) else {
             throw ConversionError.encodingFailed(filename: filename)
         }

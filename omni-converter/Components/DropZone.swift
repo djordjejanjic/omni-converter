@@ -24,7 +24,7 @@ struct DropZone: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
 
-            Text("JPG · PNG · NEF · CR2 · CR3 · ARW · RAF and more")
+            Text("JPG · PNG · WEBP· NEF · CR3 · ARW · RAF and more")
                 .font(.caption)
                 .foregroundColor(.secondary.opacity(0.7))
         }

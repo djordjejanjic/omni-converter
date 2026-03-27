@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-enum WebPEncoder {
+nonisolated enum WebPEncoder {
 
     enum WebPError: Error, LocalizedError {
         case cannotCreateColorSpace
